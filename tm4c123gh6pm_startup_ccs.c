@@ -24,6 +24,17 @@
 
 #include <stdint.h>
 #include "tm4c123gh6pm.h"
+#include "stdint.h"
+#include "string.h"
+#include "aes.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_types.h"
+#include "inc/hw_gpio.h"
+#include "inc/hw_ints.h"
+#include "driverlib/pin_map.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/eeprom.h"
+#define E2PROM_TEST_ADRES 0x0000
 
 //*****************************************************************************
 //
@@ -36,6 +47,12 @@ static void Uart_RX_handler(void);
 static void FaultISR(void);
 static void IntDefaultHandler(void);
 static void GPIOF_Handler(void);
+
+
+static int counter=0;
+static char rec_buf[18];
+static uint8_t ID='a';
+struct tc_aes_key_sched_struct s;
 
 
 void UART_TX(char c){
@@ -324,21 +341,42 @@ static void Uart_RX_handler(void){
     unsigned char rx_data = 0;
     UART0_ICR_R &= ~(0x010); // Clear receive interrupt
     while((UART0_FR_R & (1<<4)) != 0);
-    rx_data = UART0_DR_R ; // get the received data byte
-    __asm("NOP\n"); //simply here for debugging purposes
-    //do some work here
+    rec_buf[counter] = UART0_DR_R ; // get the received data byte
+    counter++;
+
+
 }
 
 
 
 static void GPIOF_Handler(void){
-    if(GPIO_PORTF_MIS_R & 0x10){ //sw1?
-        printf("Welcome to ECTF 2024");
-        printf("\n");
-        //mac users use ls /dev/tty.* port rate 9600
-        GPIO_PORTF_ICR_R |=0x10; //clear that thing
+    GPIO_PORTF_ICR_R |=0x10; //clear that thing
+    int i,j;
+    counter=0; //reset the counter
+    int rec_num; //test_and_set;
+    rec_num=counter;
+    memset(rec_buf,0,18); //reset the buffer
+
+    NVIC_EN0_R |= 0x0020;//enable UART 0
+    for(i=0;i<1600;i++){
+        for(j=0;j<20;j++){
+            if(rec_num<counter){
+                j=0;
+                rec_num=counter;
+            }
+        }
+        if(counter==4){
+            NVIC_EN0_R ^= 0x0020;//disable UART 0
+            //do some encryption and transmit I guess?
+            EEPROMRead((uint32_t *)&s, E2PROM_TEST_ADRES, sizeof(s));
+            tc_aes_encrypt(rec_buf, rec_buf, &s);
+            memset(&s,0,sizeof(s));
+            rec_buf[16]=ID;
+            printf(rec_buf);
+            break;
+        }
+        counter=0;
     }
-    else if (GPIO_PORTF_MIS_R & 0x10){ //sw2?
-        GPIO_PORTF_ICR_R |=0x01;
-    }
+
+
 }

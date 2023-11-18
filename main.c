@@ -1,10 +1,26 @@
 #include "tm4c123gh6pm.h"
 #include "string.h"
+#include "aes.h"
 #include "stdint.h"
 #include "stdbool.h"
 #include "driverlib/flash.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_types.h"
+#include "inc/hw_gpio.h"
+#include "inc/hw_ints.h"
+#include "driverlib/pin_map.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/eeprom.h"
 
-//flash memory starts at 0 to 0x0003FFFF
+#define E2PROM_TEST_ADRES 0x0000
+static struct tc_aes_key_sched_struct s;
+
+
+//set up the board's EEPROM
+void EEPROM_SETUP(){
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_EEPROM0); // EEPROM activate
+    EEPROMInit(); // EEPROM start
+}
 
 
 
@@ -85,11 +101,19 @@ int main(void)
     //We are setting up interrupts here
     UART0_IM_R  = 0x0010; //make bit 4 RX active for receiving
     UART0_ICR_R &= ~(0x010); //clear any existing interrupt
-    NVIC_EN0_R |= 0x0020;//enable UART 0 handler now we are done
-
-
+    NVIC_EN0_R = 0x0000;//enable UART 0 handler now we are done
     button_setup();
 
+
+    EEPROM_SETUP();
+
+
+    //initialize the key structure
+    tc_aes128_set_encrypt_key(&s, "abcdefghijklmlnoqweqweqweqw");
+    //store the value to EEPROM
+    EEPROMProgram((uint32_t *)&s, E2PROM_TEST_ADRES, sizeof(s));
+    //memset the whole key strcuture and the value
+    memset(&s,0,sizeof(s));
 
 
     //we want to setup TIVA wire flash write? Maybe
